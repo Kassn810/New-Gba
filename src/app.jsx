@@ -1,10 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 
-/** ============================
- * IndexedDB helpers
- * ============================ */
-const DB_NAME = "gba-emulator-fs";
-const STORE = "files"; // key: filename, value: Blob
+// IndexedDB helpers
+const DB_NAME = "multi-emulator-fs";
+const STORE = "files";
 
 function openDB() {
   return new Promise((resolve, reject) => {
@@ -80,28 +78,16 @@ function downloadBlob(filename, blob) {
   URL.revokeObjectURL(url);
 }
 
-/** ============================
- * EmulatorJS config
- * ============================ */
+// EmulatorJS config
 const CDN = "https://cdn.emulatorjs.org";
 const DATA_PATH = `${CDN}/stable/data/`;
 const LOADER = `${CDN}/loader.js`;
 const LOADER_ID = "ejs-loader-script";
 
-function removeExistingLoader() {
+function injectLoader(src) {
   const old = document.getElementById(LOADER_ID);
   if (old && old.parentNode) old.parentNode.removeChild(old);
-}
 
-function removeExistingIframe() {
-  // EmulatorJS mounts an <iframe> into the container; nuke it between runs
-  const container = document.querySelector("#emu-container");
-  if (!container) return;
-  while (container.firstChild) container.removeChild(container.firstChild);
-}
-
-function injectLoader(src) {
-  removeExistingLoader();
   return new Promise((resolve, reject) => {
     const s = document.createElement("script");
     s.id = LOADER_ID;
@@ -113,10 +99,7 @@ function injectLoader(src) {
   });
 }
 
-/** ============================
- * Component
- * ============================ */
-export default function GBAEmulatorCanvas() {
+export default function App() {
   const containerRef = useRef(null);
   const fileInputRef = useRef(null);
   const biosInputRef = useRef(null);
@@ -131,34 +114,49 @@ export default function GBAEmulatorCanvas() {
   useEffect(() => {
     (async () => {
       const keys = await idbKeys();
-      setRoms(keys.filter((k) => String(k).toLowerCase().endsWith(".gba")));
-      const bios = keys.find((k) => String(k).toLowerCase() === "gba_bios.bin");
+      setRoms(keys.filter((k) => !k.toLowerCase().includes("bios")));
+      const bios = keys.find((k) => k.toLowerCase() === "gba_bios.bin");
       if (bios) setBiosName(bios);
     })();
   }, []);
 
-  function setStatus(msg) {
+  const setStatus = (msg) => {
     setMessage(msg);
-    // keep visible longer while core boots
-    setTimeout(() => setMessage(""), 4000);
-  }
+    setTimeout(() => setMessage(""), 3000);
+  };
+
+  const getCoreFromFile = (filename) => {
+    const lower = filename.toLowerCase();
+    if (lower.endsWith(".gba")) return "gba";
+    if (lower.endsWith(".gb") || lower.endsWith(".gbc")) return "gb";
+    if (lower.endsWith(".smc") || lower.endsWith(".sfc")) return "snes";
+    if (lower.endsWith(".nes")) return "nes";
+    if (lower.endsWith(".n64") || lower.endsWith(".z64") || lower.endsWith(".v64")) return "n64";
+    if (lower.endsWith(".nds")) return "nds";
+    if (lower.endsWith(".iso") || lower.endsWith(".bin") || lower.endsWith(".cue")) return "ps1";
+    return null;
+  };
 
   const onAddRom = async (files) => {
-    if (!files || files.length === 0) return;
-    let added = 0;
+    if (!files) return;
+    const additions = [];
     for (const f of Array.from(files)) {
-      if (!String(f.name).toLowerCase().endsWith(".gba")) continue;
       await idbPut(f.name, f);
-      added++;
+      additions.push(f.name);
     }
-    const keys = await idbKeys();
-    setRoms(keys.filter((k) => String(k).toLowerCase().endsWith(".gba")));
-    setStatus(added ? `Added ${added} ROM${added > 1 ? "s" : ""}.` : "No .gba files detected.");
+    if (additions.length) {
+      const keys = await idbKeys();
+      setRoms(keys.filter((k) => !k.toLowerCase().includes("bios")));
+      setStatus(`Added ${additions.length} ROM${additions.length > 1 ? "s" : ""}.`);
+    } else {
+      setStatus("No valid ROMs detected.");
+    }
   };
 
   const onAddBios = async (files) => {
     if (!files || files.length === 0) return;
-    await idbPut("gba_bios.bin", files[0]);
+    const f = files[0];
+    await idbPut("gba_bios.bin", f);
     setBiosName("gba_bios.bin");
     setStatus("BIOS stored as gba_bios.bin");
   };
@@ -166,7 +164,7 @@ export default function GBAEmulatorCanvas() {
   const onDeleteRom = async (name) => {
     await idbDelete(name);
     const keys = await idbKeys();
-    setRoms(keys.filter((k) => String(k).toLowerCase().endsWith(".gba")));
+    setRoms(keys.filter((k) => !k.toLowerCase().includes("bios")));
     if (selected === name) setSelected(null);
     setStatus(`Deleted ${name}`);
   };
@@ -176,23 +174,10 @@ export default function GBAEmulatorCanvas() {
     if (blob) downloadBlob(name, blob);
   };
 
-  const resetStage = () => {
-    removeExistingIframe();
-    removeExistingLoader();
-    if (containerRef.current) {
-      containerRef.current.innerHTML = `
-        <div class="pointer-events-none select-none text-center px-6 text-neutral-500">
-          Drop .gba here or pick a ROM from your library.
-        </div>`;
-    }
-    setSelected(null);
-    setStatus("Reset stage.");
-  };
-
   const startEmulator = async (romName) => {
     try {
       setLoading(true);
-      setStatus("Booting mGBA core…");
+      setStatus("Booting emulator...");
 
       const romBlob = await idbGet(romName);
       if (!romBlob) throw new Error("ROM not found in IndexedDB");
@@ -204,36 +189,37 @@ export default function GBAEmulatorCanvas() {
         if (biosBlob) biosURL = URL.createObjectURL(biosBlob);
       }
 
-      // Clean previous run (iframe + loader)
-      resetStage();
+      const core = getCoreFromFile(romName);
+      if (!core) {
+        alert("Unsupported file type. Supported: GBA, GB/GBC, SNES, NES, N64, NDS, PS1.");
+        return;
+      }
 
-      // Configure EmulatorJS globals
+      if (containerRef.current) containerRef.current.innerHTML = "";
+
       window.EJS_player = "#emu-container";
-      window.EJS_core = "gba";
+      window.EJS_core = core;
       window.EJS_pathtodata = DATA_PATH;
       window.EJS_gameUrl = romURL;
-      window.EJS_gameName = romName;        // optional, used by UI/saves
-      window.EJS_language = "en-us";        // optional
-      if (biosURL) window.EJS_biosUrl = biosURL; else delete window.EJS_biosUrl;
-      window.EJS_startOnLoaded = true;
 
-      // Optional toggles you can play with:
-      // window.EJS_fullscreenOnLoad = false;
-      // window.EJS_Buttons = { "Select":"ShiftRight" }; // example custom keybinds
+      if (biosURL && core === "gba") {
+        window.EJS_biosUrl = biosURL;
+      } else {
+        delete window.EJS_biosUrl;
+      }
 
       await injectLoader(`${LOADER}?v=${Date.now()}`);
-
       setSelected(romName);
-      setStatus(`Running: ${romName}`);
 
-      // Revoke object URLs slightly after load
       setTimeout(() => {
         URL.revokeObjectURL(romURL);
         if (biosURL) URL.revokeObjectURL(biosURL);
       }, 10000);
+
+      setStatus(`Running: ${romName}`);
     } catch (e) {
       console.error(e);
-      setStatus(e?.message || "Failed to start emulator");
+      setStatus(e.message || "Failed to start emulator");
     } finally {
       setLoading(false);
     }
@@ -245,11 +231,7 @@ export default function GBAEmulatorCanvas() {
     if (!el) return;
 
     const prevent = (e) => { e.preventDefault(); e.stopPropagation(); };
-    const onDrop = (e) => {
-      prevent(e);
-      const files = (e.dataTransfer && e.dataTransfer.files) || null;
-      onAddRom(files);
-    };
+    const onDrop = (e) => { prevent(e); onAddRom(e.dataTransfer.files); };
 
     el.addEventListener("dragover", prevent);
     el.addEventListener("drop", onDrop);
@@ -257,36 +239,30 @@ export default function GBAEmulatorCanvas() {
       el.removeEventListener("dragover", prevent);
       el.removeEventListener("drop", onDrop);
     };
-  }, []);
+  }, [containerRef]);
 
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100 p-6">
       <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left: Library + Controls */}
+        {/* Library & Controls */}
         <div className="lg:col-span-1 space-y-4">
-          <h1 className="text-2xl font-bold">GBA Emulator</h1>
-          <p className="text-sm text-neutral-400">
-            Drop <code>.gba</code> files anywhere or use the buttons. Files persist in IndexedDB.
-            Optional BIOS: <code>gba_bios.bin</code>.
-          </p>
+          <h1 className="text-2xl font-bold">Multi-System Emulator</h1>
+          <p className="text-sm text-neutral-400">Drop ROM files or use the buttons. Files persist in your browser (IndexedDB). Optional: add <code>gba_bios.bin</code> for GBA.</p>
 
           <div className="bg-neutral-900 rounded-2xl p-4 shadow">
             <div className="flex items-center gap-2 mb-3">
-              <button onClick={() => fileInputRef.current?.click()} className="px-3 py-2 rounded-2xl bg-neutral-800 hover:bg-neutral-700 shadow">➕ Add ROMs</button>
-              <input ref={fileInputRef} type="file" accept=".gba" multiple className="hidden" onChange={(e) => onAddRom(e.target.files)} />
-              <button onClick={() => biosInputRef.current?.click()} className="px-3 py-2 rounded-2xl bg-neutral-800 hover:bg-neutral-700 shadow">🧬 Add BIOS</button>
+              <button onClick={() => fileInputRef.current && fileInputRef.current.click()} className="px-3 py-2 rounded-2xl bg-neutral-800 hover:bg-neutral-700 shadow">➕ Add ROMs</button>
+              <input ref={fileInputRef} type="file" accept=".gba,.gb,.gbc,.smc,.sfc,.nes,.n64,.z64,.v64,.nds,.iso,.bin,.cue" multiple className="hidden" onChange={(e) => onAddRom(e.target.files)} />
+              <button onClick={() => biosInputRef.current && biosInputRef.current.click()} className="px-3 py-2 rounded-2xl bg-neutral-800 hover:bg-neutral-700 shadow">🧬 Add BIOS</button>
               <input ref={biosInputRef} type="file" accept=".bin" className="hidden" onChange={(e) => onAddBios(e.target.files)} />
-              <button onClick={resetStage} className="px-3 py-2 rounded-2xl bg-neutral-800 hover:bg-neutral-700 shadow">♻️ Reset</button>
             </div>
-            <div className="text-xs text-neutral-400">
-              {biosName ? `BIOS: ${biosName}` : "No BIOS stored (optional)"}
-            </div>
+            <div className="text-xs text-neutral-400">{biosName ? `BIOS: ${biosName}` : "No BIOS stored (optional)"}</div>
           </div>
 
           <div className="bg-neutral-900 rounded-2xl p-4 shadow">
             <h2 className="font-semibold mb-2">Library</h2>
             {roms.length === 0 ? (
-              <div className="text-neutral-400 text-sm">No ROMs yet. Add some .gba files.</div>
+              <div className="text-neutral-400 text-sm">No ROMs yet. Add some files.</div>
             ) : (
               <ul className="divide-y divide-neutral-800">
                 {roms.map((name) => (
@@ -302,25 +278,14 @@ export default function GBAEmulatorCanvas() {
               </ul>
             )}
           </div>
-
-          <div className="bg-neutral-900 rounded-2xl p-4 shadow text-sm space-y-2">
-            <h2 className="font-semibold">Tips</h2>
-            <ul className="list-disc pl-5 space-y-1 text-neutral-300">
-              <li>Hover the game area for the emulator toolbar (fullscreen, gamepad, save states).</li>
-              <li>Battery saves and save-states persist automatically in your browser.</li>
-              <li>If a game doesn’t start, try adding a valid <code>gba_bios.bin</code>.</li>
-            </ul>
-          </div>
         </div>
 
-        {/* Right: Emulator Stage */}
+        {/* Emulator Stage */}
         <div className="lg:col-span-2">
           <div className="bg-neutral-900 rounded-2xl p-4 shadow">
             <div className="flex items-center justify-between mb-3">
               <div className="font-semibold">Stage</div>
-              <div className="text-sm text-neutral-400">
-                {loading ? "Loading core..." : selected ? `Now playing: ${selected}` : "Idle"}
-              </div>
+              <div className="text-sm text-neutral-400">{loading ? "Loading core..." : selected ? `Now playing: ${selected}` : "Idle"}</div>
             </div>
             <div
               id="emu-container"
@@ -328,7 +293,7 @@ export default function GBAEmulatorCanvas() {
               className="relative w-full aspect-[4/3] rounded-xl bg-neutral-950 border border-neutral-800 flex items-center justify-center text-neutral-500"
             >
               <div className="pointer-events-none select-none text-center px-6">
-                Drop .gba here or pick a ROM from your library.
+                Drop ROMs here or pick from the library.
               </div>
             </div>
             {message && (
