@@ -1,152 +1,165 @@
-import React, { useEffect, useRef, useState } from "react";
-import clsx from "clsx"; // optional, for conditional class names
+import React, { useState, useEffect, useRef } from "react";
 
-// IndexedDB helpers, injectLoader, startEmulator etc remain unchanged
-// ... keep the same IDB and emulator functions as before ...
+// IndexedDB helpers (same as before)
+async function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open("multi-emulator-fs", 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains("files")) db.createObjectStore("files");
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbPut(key, value) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("files", "readwrite");
+    tx.objectStore("files").put(value, key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+async function idbGet(key) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("files", "readonly");
+    const req = tx.objectStore("files").get(key);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbKeys() {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("files", "readonly");
+    const keys = [];
+    const req = tx.objectStore("files").openCursor();
+    req.onsuccess = (e) => {
+      const cursor = e.target.result;
+      if (cursor) {
+        keys.push(cursor.key);
+        cursor.continue();
+      } else {
+        resolve(keys);
+      }
+    };
+    req.onerror = () => reject(req.error);
+  });
+}
 
+// Loader injection for WASM cores
+function injectLoader(src) {
+  return new Promise((resolve, reject) => {
+    const existing = document.getElementById("emulator-loader");
+    if (existing) existing.remove();
+    const script = document.createElement("script");
+    script.id = "emulator-loader";
+    script.src = src;
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Failed to load emulator loader"));
+    document.body.appendChild(script);
+  });
+}
+
+// Map extensions to system
+const SYSTEMS = {
+  gba: ["gba"],
+  gb: ["gb"],
+  gbc: ["gbc"],
+  nes: ["nes"],
+  snes: ["smc", "sfc"],
+  n64: ["n64", "z64", "v64"],
+  nds: ["nds"],
+  ps1: ["iso", "bin", "cue"],
+  "3ds": ["3ds"],
+};
 const SYSTEM_COLORS = {
   gba: "bg-emerald-500",
   gb: "bg-green-700",
   gbc: "bg-green-600",
-  snes: "bg-pink-500",
   nes: "bg-red-500",
+  snes: "bg-pink-500",
   n64: "bg-blue-500",
   nds: "bg-orange-500",
   ps1: "bg-purple-500",
-  "3ds": "bg-cyan-500",  // New 3DS color
+  "3ds": "bg-cyan-500",
 };
-
-const getSystem = (filename) => {
-  const lower = filename.toLowerCase();
-  if (lower.endsWith(".gba")) return "gba";
-  if (lower.endsWith(".gb")) return "gb";
-  if (lower.endsWith(".gbc")) return "gbc";
-  if (lower.endsWith(".smc") || lower.endsWith(".sfc")) return "snes";
-  if (lower.endsWith(".nes")) return "nes";
-  if (lower.endsWith(".n64") || lower.endsWith(".z64") || lower.endsWith(".v64")) return "n64";
-  if (lower.endsWith(".nds")) return "nds";
-  if (lower.endsWith(".iso") || lower.endsWith(".bin") || lower.endsWith(".cue")) return "ps1";
-  if (lower.endsWith(".3ds")) return "3ds";   // New 3DS support
-  return null;
-};
-
+function getSystem(filename) {
+  const ext = filename.split(".").pop()?.toLowerCase();
+  return Object.entries(SYSTEMS).find(([k, arr]) => arr.includes(ext))?.[0] || null;
+}
 
 export default function App() {
-  const containerRef = useRef(null);
-  const fileInputRef = useRef(null);
-  const biosInputRef = useRef(null);
-
   const [roms, setRoms] = useState([]);
   const [selected, setSelected] = useState(null);
   const [biosName, setBiosName] = useState(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const containerRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const biosInputRef = useRef(null);
 
-  // Load ROMs from IndexedDB on mount
   useEffect(() => {
     (async () => {
       const keys = await idbKeys();
-      setRoms(keys.filter((k) => !k.toLowerCase().includes("bios")));
-      const bios = keys.find((k) => k.toLowerCase() === "gba_bios.bin");
+      setRoms(keys.filter(k => !k.toLowerCase().includes("bios")));
+      const bios = keys.find(k => k.toLowerCase().includes("bios"));
       if (bios) setBiosName(bios);
     })();
   }, []);
 
-  const setStatus = (msg) => {
-    setMessage(msg);
-    setTimeout(() => setMessage(""), 3000);
+  const setStatus = (msg) => { setMessage(msg); setTimeout(() => setMessage(""), 3000); };
+
+  const onAddRom = async (files) => {
+    if (!files) return;
+    const added = [];
+    for (const f of Array.from(files)) {
+      await idbPut(f.name, f);
+      added.push(f.name);
+    }
+    if (added.length) {
+      const keys = await idbKeys();
+      setRoms(keys.filter(k => !k.toLowerCase().includes("bios")));
+      setStatus(`Added ${added.length} ROM${added.length>1?"s":""}`);
+    }
   };
 
-  // Add ROMs / BIOS / Delete / Export / Start Emulator functions remain unchanged
-  // ... reuse the previous App.jsx logic here ...
+  const onAddBios = async (files) => {
+    if (!files || files.length === 0) return;
+    const f = files[0];
+    await idbPut("bios.bin", f);
+    setBiosName("bios.bin");
+    setStatus("BIOS stored");
+  };
 
-  return (
-    <div className="min-h-screen bg-neutral-900 text-neutral-100 p-6 font-sans">
-      <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Library */}
-        <div className="lg:col-span-1 space-y-4">
-          <h1 className="text-3xl font-bold mb-2">🎮 Multi-System Emulator</h1>
-          <p className="text-neutral-400 text-sm mb-4">
-            Drop ROM files or use the buttons. ROMs persist in your browser (IndexedDB). Optional: add <code>gba_bios.bin</code> for GBA.
-          </p>
+  const startEmulator = async (romName) => {
+    try {
+      setLoading(true);
+      setStatus(`Starting ${romName}...`);
 
-          <div className="bg-neutral-800 rounded-2xl p-4 shadow-lg">
-            <div className="flex gap-2 mb-4">
-              <button onClick={() => fileInputRef.current && fileInputRef.current.click()}
-                className="flex-1 py-2 bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl text-black font-semibold hover:scale-105 transition transform shadow-md">
-                ➕ Add ROMs
-              </button>
-              <input ref={fileInputRef} type="file" accept=".gba,.gb,.gbc,.smc,.sfc,.nes,.n64,.z64,.v64,.nds,.iso,.bin,.cue" multiple className="hidden" onChange={(e) => onAddRom(e.target.files)} />
+      const romBlob = await idbGet(romName);
+      if (!romBlob) throw new Error("ROM not found");
 
-              <button onClick={() => biosInputRef.current && biosInputRef.current.click()}
-                className="flex-1 py-2 bg-gradient-to-r from-yellow-500 to-orange-600 rounded-xl text-black font-semibold hover:scale-105 transition transform shadow-md">
-                🧬 Add BIOS
-              </button>
-              <input ref={biosInputRef} type="file" accept=".bin" className="hidden" onChange={(e) => onAddBios(e.target.files)} />
-            </div>
-            <div className="text-xs text-neutral-400">{biosName ? `BIOS: ${biosName}` : "No BIOS stored (optional)"}</div>
-          </div>
+      const system = getSystem(romName);
+      const romURL = URL.createObjectURL(romBlob);
 
-          <div className="space-y-3">
-            {roms.length === 0 ? (
-              <div className="text-neutral-500">No ROMs yet. Add some games!</div>
-            ) : (
-              <div className="grid grid-cols-1 gap-3">
-                {roms.map((name) => {
-                  const system = getSystem(name);
-                  return (
-                    <div key={name} className="bg-neutral-800 rounded-xl p-3 flex items-center justify-between hover:bg-neutral-700 transition-shadow shadow-md">
-                      <div className="truncate font-medium">{name}</div>
-                      {system && <span className={clsx("text-xs px-2 py-0.5 rounded-full text-black font-semibold", SYSTEM_COLORS[system])}>{system.toUpperCase()}</span>}
-                      <div className="flex gap-2 ml-2">
-                        <button onClick={() => startEmulator(name)} className="px-2 py-1 rounded-lg bg-gradient-to-r from-emerald-600 to-green-500 hover:scale-105 transition">Play</button>
-                        <button onClick={() => onExportRom(name)} className="px-2 py-1 rounded-lg bg-neutral-700 hover:bg-neutral-600 transition">Export</button>
-                        <button onClick={() => onDeleteRom(name)} className="px-2 py-1 rounded-lg bg-red-700 hover:bg-red-600 transition">Delete</button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
+      // Set container empty
+      if (containerRef.current) containerRef.current.innerHTML = "";
 
-        {/* Emulator Stage */}
-        <div className="lg:col-span-2">
-          <div className="bg-neutral-800 rounded-3xl p-4 shadow-xl flex flex-col gap-3">
-            <div className="flex justify-between items-center">
-              <div className="font-semibold text-lg">Emulator Stage</div>
-              <div className="text-sm text-neutral-400">{loading ? "Loading..." : selected ? `Now playing: ${selected}` : "Idle"}</div>
-            </div>
-            <div
-              id="emu-container"
-              ref={containerRef}
-              className="relative w-full aspect-[4/3] rounded-2xl bg-neutral-950 border border-neutral-700 flex items-center justify-center text-neutral-500 shadow-inner"
-            >
-              <div className="pointer-events-none select-none text-center px-6">
-                Drop ROMs here or pick from the library.
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      // Assign system-specific globals
+      window.EJS_player = "#emu-container";
+      window.EJS_core = system;
+      window.EJS_gameUrl = romURL;
+      if (biosName) {
+        const biosBlob = await idbGet(biosName);
+        if (biosBlob) window.EJS_biosUrl = URL.createObjectURL(biosBlob);
+      }
+      window.EJS_startOnLoaded = true;
 
-      {/* Toast */}
-      {message && (
-        <div className="fixed bottom-6 right-6 bg-neutral-800 px-4 py-2 rounded-xl shadow-lg animate-fade-in-out">
-          {message}
-        </div>
-      )}
+      // Load loader dynamically
+      await injectLoader(`https://cdn.emulatorjs.org/stable/loader.js?v=${Date.now()}`);
 
-      <style>{`
-        @keyframes fade-in-out {
-          0%, 100% { opacity: 0; transform: translateY(10px); }
-          10%, 90% { opacity: 1; transform: translateY(0); }
-        }
-        .animate-fade-in-out {
-          animation: fade-in-out 3s forwards;
-        }
-      `}</style>
-    </div>
-  );
-}
+      set
