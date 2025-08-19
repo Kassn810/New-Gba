@@ -5,7 +5,16 @@
     <title>GBA Emulator</title>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Fallback content in case React or JS doesn't load -->
+      <noscript>
+        <p>Please enable JavaScript to run the GBA Emulator.</p>
+      </noscript>
+      <p style="color: gray;">Loading GBA Emulator...</p>
+    </div>
+
+    <!-- React entry point -->
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
+
