@@ -1,108 +1,188 @@
-import React, { useEffect, useRef, useState } from "react";
-import "./App.css";
-
-import GBA from "./cores/gba";
+// src/App.jsx
+import React, { useRef, useEffect, useState } from "react";
+import GB from "./cores/gb";
 import GBC from "./cores/gbc";
-import DS from "./cores/ds";
-import _3DS from "./cores/_3ds";
 import NES from "./cores/nes";
 import SNES from "./cores/snes";
-import PS1 from "./cores/ps1";
-
-const SYSTEMS = { GBA, GBC, DS, _3DS, NES, SNES, PS1 };
+import N64 from "./cores/n64";
+import GBA from "./cores/gba";
+import DS from "./cores/ds";
+import _3DS from "./cores/_3ds";
+import "./App.css";
 
 export default function App() {
-  const canvasRef = useRef(null);
-  const [activeSystem, setActiveSystem] = useState("GBA");
-  const [Module, setModule] = useState(null);
-  const [romFile, setRomFile] = useState(null);
-  const [isRunning, setIsRunning] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const gbRef = useRef(null);
+  const gbcRef = useRef(null);
+  const consoleRef = useRef(null);
+  const dsTopRef = useRef(null);
+  const dsBottomRef = useRef(null);
+  const _3dsTopRef = useRef(null);
+  const _3dsBottomRef = useRef(null);
+
+  const [modules, setModules] = useState({});
+  const [quickMenuOpen, setQuickMenuOpen] = useState(false);
+  const [volume, setVolume] = useState(1.0);
 
   useEffect(() => {
-    const loadCore = async () => {
-      const core = SYSTEMS[activeSystem];
-      const mod = await core.init({ canvas: canvasRef.current });
-      setModule(mod);
-      setIsRunning(false);
-    };
-    loadCore();
-  }, [activeSystem]);
+    GB.init({ canvas: gbRef.current }).then((mod) =>
+      setModules((m) => ({ ...m, gb: mod }))
+    );
+    GBC.init({ canvas: gbcRef.current }).then((mod) =>
+      setModules((m) => ({ ...m, gbc: mod }))
+    );
+    NES.init({ canvas: consoleRef.current }).then((mod) =>
+      setModules((m) => ({ ...m, nes: mod }))
+    );
+    SNES.init({ canvas: consoleRef.current }).then((mod) =>
+      setModules((m) => ({ ...m, snes: mod }))
+    );
+    N64.init({ canvas: consoleRef.current }).then((mod) =>
+      setModules((m) => ({ ...m, n64: mod }))
+    );
+    GBA.init({ canvas: consoleRef.current }).then((mod) =>
+      setModules((m) => ({ ...m, gba: mod }))
+    );
+    DS.init({ canvas: dsTopRef.current, bottomCanvas: dsBottomRef.current }).then((mod) =>
+      setModules((m) => ({ ...m, ds: mod }))
+    );
+    _3DS.init({ canvas: _3dsTopRef.current, bottomCanvas: _3dsBottomRef.current }).then((mod) =>
+      setModules((m) => ({ ...m, _3ds: mod }))
+    );
+  }, []);
 
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
+  const handleLoadROM = (event, coreName) => {
+    const file = event.target.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (evt) => setRomFile(new Uint8Array(evt.target.result));
+    reader.onload = (e) => {
+      const data = new Uint8Array(e.target.result);
+      modules[coreName]?.loadROM?.(modules[coreName], data);
+      modules[coreName]?.start?.(modules[coreName]);
+    };
     reader.readAsArrayBuffer(file);
   };
 
-  const startEmulator = () => {
-    if (!Module || !romFile) return;
-    SYSTEMS[activeSystem].loadROM(Module, romFile);
-    SYSTEMS[activeSystem].start(Module);
-    setIsRunning(true);
+  const handleSaveState = (coreName) => {
+    const state = modules[coreName]?.saveState?.(modules[coreName]);
+    if (state) {
+      const blob = new Blob([state]);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${coreName}-state.sav`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
   };
 
-  const stopEmulator = () => {
-    if (!Module) return;
-    SYSTEMS[activeSystem].stop(Module);
-    setIsRunning(false);
-  };
-
-  const saveState = () => {
-    if (!Module || !isRunning) return;
-    const state = SYSTEMS[activeSystem].saveState(Module);
-    localStorage.setItem(activeSystem + "-save", JSON.stringify(Array.from(state)));
-    alert("State saved!");
-  };
-
-  const loadState = () => {
-    if (!Module) return;
-    const saved = localStorage.getItem(activeSystem + "-save");
-    if (!saved) return alert("No saved state for this system.");
-    const stateArray = new Uint8Array(JSON.parse(saved));
-    SYSTEMS[activeSystem].loadState(Module, stateArray);
-    alert("State loaded!");
+  const handleLoadState = (event, coreName) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const data = new Uint8Array(e.target.result);
+      modules[coreName]?.loadState?.(modules[coreName], data);
+    };
+    reader.readAsArrayBuffer(file);
   };
 
   return (
-    <div className="emulator-container">
-      <h1 className="emulator-title">Multi-System Emulator</h1>
-      <div className="canvas-wrapper">
-        <canvas ref={canvasRef} width={240} height={160} className="gba-canvas" />
-      </div>
-
-      <div className="controls">
-        <button onClick={() => setMenuOpen(!menuOpen)} className="control-btn">
-          {menuOpen ? "Close Menu" : "Quick Menu"}
+    <div className="app-container">
+      <div className="header">
+        <h1>Multi-System Emulator</h1>
+        <button onClick={() => setQuickMenuOpen(!quickMenuOpen)}>
+          {quickMenuOpen ? "Close Menu" : "Quick Menu"}
         </button>
       </div>
 
-      <div className={`quick-menu ${menuOpen ? "open" : ""}`}>
+      {/* --- GB / GBC --- */}
+      <div className="screen-group">
+        <canvas ref={gbRef} className="screen-gb" />
+        <canvas ref={gbcRef} className="screen-gb" />
+        <div className="controls">
+          <label className="label-file">
+            Load GB
+            <input type="file" accept=".gb" onChange={(e) => handleLoadROM(e, "gb")} />
+          </label>
+          <label className="label-file">
+            Load GBC
+            <input type="file" accept=".gbc" onChange={(e) => handleLoadROM(e, "gbc")} />
+          </label>
+        </div>
+      </div>
+
+      {/* --- NES / SNES / N64 / GBA --- */}
+      <div className="screen-group">
+        <canvas ref={consoleRef} className="screen-console" />
+        <div className="controls">
+          <label className="label-file">
+            Load NES
+            <input type="file" accept=".nes" onChange={(e) => handleLoadROM(e, "nes")} />
+          </label>
+          <label className="label-file">
+            Load SNES
+            <input type="file" accept=".sfc,.smc" onChange={(e) => handleLoadROM(e, "snes")} />
+          </label>
+          <label className="label-file">
+            Load N64
+            <input type="file" accept=".n64,.z64" onChange={(e) => handleLoadROM(e, "n64")} />
+          </label>
+          <label className="label-file">
+            Load GBA
+            <input type="file" accept=".gba" onChange={(e) => handleLoadROM(e, "gba")} />
+          </label>
+        </div>
+      </div>
+
+      {/* --- DS --- */}
+      <div className="dual-screen-ds">
+        <canvas ref={dsTopRef} className="screen-ds-top" />
+        <canvas ref={dsBottomRef} className="screen-ds-bottom" />
+        <div className="controls">
+          <label className="label-file">
+            Load DS
+            <input type="file" accept=".nds" onChange={(e) => handleLoadROM(e, "ds")} />
+          </label>
+        </div>
+      </div>
+
+      {/* --- 3DS --- */}
+      <div className="dual-screen-3ds">
+        <canvas ref={_3dsTopRef} className="screen-3ds-top" />
+        <canvas ref={_3dsBottomRef} className="screen-3ds-bottom" />
+        <div className="controls">
+          <label className="label-file">
+            Load 3DS
+            <input type="file" accept=".3ds" onChange={(e) => handleLoadROM(e, "_3ds")} />
+          </label>
+        </div>
+      </div>
+
+      {/* --- Quick Menu --- */}
+      <div className={`quick-menu ${quickMenuOpen ? "open" : ""}`}>
         <h2>Quick Menu</h2>
-        <div className="menu-item">
-          <label>Select System:</label>
-          <select value={activeSystem} onChange={(e) => setActiveSystem(e.target.value)}>
-            {Object.keys(SYSTEMS).map((sys) => (
-              <option key={sys} value={sys}>{sys}</option>
-            ))}
-          </select>
-        </div>
+        <label>
+          Volume
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            value={volume}
+            onChange={(e) => setVolume(parseFloat(e.target.value))}
+          />
+        </label>
 
-        <div className="menu-item">
-          <label>Load ROM:</label>
-          <input type="file" accept=".gba,.gbc,.gb,.nds,.3ds,.nes,.sfc,.smc,.iso,.bin" onChange={handleFileChange} />
-        </div>
-
-        <div className="menu-buttons">
-          <button onClick={startEmulator} disabled={!romFile || isRunning} className="control-btn">Start</button>
-          <button onClick={stopEmulator} disabled={!isRunning} className="control-btn">Stop</button>
-          <button onClick={saveState} disabled={!isRunning} className="control-btn">Save State</button>
-          <button onClick={loadState} disabled={!Module} className="control-btn">Load State</button>
-        </div>
+        {Object.keys(modules).map((core) => (
+          <div key={core}>
+            <button onClick={() => handleSaveState(core)}>Save {core}</button>
+            <label className="label-file">
+              Load {core} State
+              <input type="file" onChange={(e) => handleLoadState(e, core)} />
+            </label>
+          </div>
+        ))}
       </div>
     </div>
   );
 }
-
