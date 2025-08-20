@@ -7,34 +7,29 @@ export default async function initGBA(canvas, romBuffer) {
     const memory = new WebAssembly.Memory({ initial: 256 });
 
     const { instance } = await WebAssembly.instantiate(bytes, {
-      env: {
-        memory,
-        abort: () => console.log("Abort called in GBA core"),
-      },
+      env: { memory, abort: () => console.log("Abort called in GBA core") },
     });
 
-    // Initialize emulator if function exists
-    if (instance.exports.init) {
-      instance.exports.init();
-    }
+    if (instance.exports.init) instance.exports.init();
 
-    // Load ROM
     if (instance.exports.loadROM) {
       const romPtr = instance.exports.loadROM(romBuffer.byteLength);
       const heap = new Uint8Array(instance.exports.memory.buffer, romPtr, romBuffer.byteLength);
       heap.set(new Uint8Array(romBuffer));
     }
 
-    // Run frames
-    function frame() {
-      if (instance.exports.frame) {
-        instance.exports.frame();
-        // TODO: draw framebuffer -> canvas
-      }
-      requestAnimationFrame(frame);
-    }
-    frame();
+    // Run at native GBA refresh rate
+    const frameInterval = 1000 / 59.727;
+    const loop = setInterval(() => {
+      if (instance.exports.frame) instance.exports.frame();
+    }, frameInterval);
+
+    // Return cleanup
+    return () => clearInterval(loop);
+
   } catch (err) {
     console.error("Failed to init GBA core:", err);
+    return () => {};
   }
 }
+
