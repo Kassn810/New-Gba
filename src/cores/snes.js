@@ -1,14 +1,29 @@
 // src/cores/snes.js
-export default {
-  init: async ({ canvas }) => {
+export default async function initSNES(canvas, romBuffer) {
+  try {
     const response = await fetch("/cores/snes.wasm");
-    const buffer = await response.arrayBuffer();
+    const bytes = await response.arrayBuffer();
 
-    const module = await window.SNESModule({
-      wasmBinary: buffer,
-      canvas: canvas
+    const memory = new WebAssembly.Memory({ initial: 512 });
+
+    const { instance } = await WebAssembly.instantiate(bytes, {
+      env: { memory, abort: () => console.log("Abort called in SNES core") },
     });
 
-    return module;
+    if (instance.exports.init) instance.exports.init();
+
+    if (instance.exports.loadROM) {
+      const romPtr = instance.exports.loadROM(romBuffer.byteLength);
+      const heap = new Uint8Array(instance.exports.memory.buffer, romPtr, romBuffer.byteLength);
+      heap.set(new Uint8Array(romBuffer));
+    }
+
+    function frame() {
+      if (instance.exports.frame) instance.exports.frame();
+      requestAnimationFrame(frame);
+    }
+    frame();
+  } catch (err) {
+    console.error("Failed to init SNES core:", err);
   }
-};
+}
