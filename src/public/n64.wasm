@@ -1,0 +1,29 @@
+export default {
+  init: async ({ canvas }) => {
+    const wasm = await fetch("/n64.wasm");
+    const buffer = await wasm.arrayBuffer();
+    const module = await WebAssembly.instantiate(buffer, {
+      env: {
+        memory: new WebAssembly.Memory({ initial: 512 }),
+        table: new WebAssembly.Table({ initial: 0, element: "anyfunc" }),
+        abort: console.log,
+      },
+    });
+    return module.instance.exports;
+  },
+
+  loadROM: (Module, romData) => {
+    Module.FS_writeFile("game.n64", romData);
+  },
+
+  start: (Module) => {
+    Module.callMain && Module.callMain(["game.n64"]);
+  },
+
+  stop: (Module) => {
+    Module.exit && Module.exit();
+  },
+
+  saveState: (Module) => new Uint8Array(Module.HEAPU8.buffer),
+  loadState: (Module, stateData) => Module.HEAPU8.set(stateData),
+};
