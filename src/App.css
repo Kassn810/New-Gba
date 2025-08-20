@@ -1,159 +1,126 @@
-/* Global */
-body, html, .app {
-  margin: 0;
-  padding: 0;
-  width: 100%;
-  height: 100%;
-  background: black;
+/* Global App Styling */
+.app-container {
+  background-color: black;
   color: white;
-  font-family: 'Segoe UI', sans-serif;
+  font-family: "Segoe UI", sans-serif;
+  height: 100vh;
   display: flex;
   justify-content: center;
   align-items: center;
 }
 
-/* Menu Page */
-.menu {
+/* ===== MENU PAGE ===== */
+.menu-page {
   text-align: center;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
 }
 
 .title {
   font-size: 2.5rem;
-  margin-bottom: 10px;
+  margin-bottom: 0.5rem;
 }
 
 .subtitle {
   font-size: 1.2rem;
+  margin-bottom: 2rem;
   color: #aaa;
 }
 
 .console-grid {
   display: grid;
-  grid-template-columns: repeat(3, 120px);
-  gap: 15px;
-  justify-content: center;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 1rem;
+  max-width: 800px;
+  margin: 0 auto;
 }
 
-.console-btn {
-  padding: 12px;
-  border: none;
+.console-card {
+  background: #111;
+  border: 1px solid #333;
+  border-radius: 12px;
+  padding: 1.5rem;
+  cursor: pointer;
+  transition: 0.2s;
+  font-size: 1.2rem;
+}
+
+.console-card:hover {
   background: #222;
-  color: #fff;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: all 0.2s ease-in-out;
+  border-color: #555;
 }
 
-.console-btn:hover {
-  background: #444;
-  transform: scale(1.05);
-}
-
-.console-btn.active {
-  background: #0f62fe;
-}
-
-.file-input {
-  margin-top: 10px;
-}
-
-.start-btn {
-  margin-top: 15px;
-  padding: 12px 20px;
-  background: #0f62fe;
-  border: none;
-  color: white;
-  font-size: 1rem;
-  border-radius: 10px;
-  cursor: pointer;
-}
-
-.start-btn:disabled {
-  background: #555;
-  cursor: not-allowed;
-}
-
-/* Emulator Page */
-.emulator {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 15px;
+/* ===== EMULATOR PAGE ===== */
+.emulator-page {
+  position: relative;
   width: 100%;
   height: 100%;
-}
-
-.emulator-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  width: 80%;
-}
-
-.back-btn {
-  padding: 8px 16px;
-  background: #222;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.back-btn:hover {
-  background: #444;
 }
 
 .emulator-screen {
   display: flex;
   justify-content: center;
   align-items: center;
-  flex-grow: 1;
-  width: 100%;
-}
-
-/* DS Screens */
-.ds-screen {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-}
-
-.ds-top, .ds-bottom {
-  width: 80%;
-  max-width: 640px;
-  aspect-ratio: 4 / 3;
-  background: #000;
-}
-
-.ds-bottom {
-  transform: scale(0.8); /* 20% smaller */
-}
-
-/* 3DS Screens */
-._3ds-screen {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
   height: 100%;
 }
 
-._3ds-top {
-  width: 100%;
-  max-width: 800px;
-  aspect-ratio: 400 / 240;
-  background: black;
-}
-
-._3ds-bottom {
+canvas {
   width: 80%;
-  max-width: 640px;
-  aspect-ratio: 320 / 240;
-  background: black;
+  height: 80%;
+  object-fit: contain;
+  display: block;
+  margin: auto;
 }
 
+/* ===== QUICK MENU ===== */
+.quickmenu-toggle {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: #222;
+  color: white;
+  border: none;
+  font-size: 1.5rem;
+  padding: 0.6rem;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.quickmenu-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.quickmenu {
+  background: #111;
+  padding: 2rem;
+  border-radius: 12px;
+  text-align: center;
+  width: 300px;
+}
+
+.quickmenu h2 {
+  margin-bottom: 1rem;
+}
+
+.quickmenu button {
+  display: block;
+  width: 100%;
+  margin: 0.5rem 0;
+  padding: 0.8rem;
+  border: none;
+  border-radius: 8px;
+  background: #333;
+  color: white;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.quickmenu button:hover {
+  background: #555;
+}
