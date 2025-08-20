@@ -1,172 +1,159 @@
-/* src/App.css */
-
-/* --- General App Layout --- */
-.app-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  background-color: #111; /* dark retro background */
-  color: #fff;
-  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-  min-height: 100vh;
-  padding: 10px;
-}
-
-header {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  margin-bottom: 15px;
-}
-
-header h1 {
+/* Global */
+body, html, .app {
   margin: 0;
-  font-size: 2rem;
-  letter-spacing: 1px;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: black;
+  color: white;
+  font-family: 'Segoe UI', sans-serif;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
-.controls {
+/* Menu Page */
+.menu {
+  text-align: center;
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.title {
+  font-size: 2.5rem;
+  margin-bottom: 10px;
+}
+
+.subtitle {
+  font-size: 1.2rem;
+  color: #aaa;
+}
+
+.console-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 120px);
+  gap: 15px;
   justify-content: center;
-  gap: 10px;
+}
+
+.console-btn {
+  padding: 12px;
+  border: none;
+  background: #222;
+  color: #fff;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+}
+
+.console-btn:hover {
+  background: #444;
+  transform: scale(1.05);
+}
+
+.console-btn.active {
+  background: #0f62fe;
+}
+
+.file-input {
   margin-top: 10px;
 }
 
-.controls select,
-.controls input,
-.controls button {
-  padding: 5px 10px;
-  font-size: 0.9rem;
-  border-radius: 5px;
+.start-btn {
+  margin-top: 15px;
+  padding: 12px 20px;
+  background: #0f62fe;
   border: none;
-  outline: none;
-}
-
-.controls button {
+  color: white;
+  font-size: 1rem;
+  border-radius: 10px;
   cursor: pointer;
-  background-color: #222;
-  color: #fff;
-  transition: 0.2s;
 }
 
-.controls button:hover {
-  background-color: #555;
+.start-btn:disabled {
+  background: #555;
+  cursor: not-allowed;
 }
 
-/* --- Screens Container --- */
-.screens-container {
+/* Emulator Page */
+.emulator {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 15px;
   width: 100%;
+  height: 100%;
 }
 
-/* --- Individual Canvas Screens --- */
-.screen {
-  background-color: #000;
-  display: block;
-  margin: 5px auto;
-  border: 2px solid #444;
-  border-radius: 8px;
+.emulator-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 80%;
 }
 
-/* Group 1: GBA / GB / GBC */
-.gba-screen {
-  width: 240px;
-  height: 160px;
+.back-btn {
+  padding: 8px 16px;
+  background: #222;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
 }
 
-.gbc-screen {
-  width: 160px;
-  height: 144px;
+.back-btn:hover {
+  background: #444;
 }
 
-.gb-screen {
-  width: 160px;
-  height: 144px;
+.emulator-screen {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-grow: 1;
+  width: 100%;
 }
 
-/* Group 2: NES / SNES / N64 */
-.nes-screen {
-  width: 256px;
-  height: 240px;
-}
-
-.snes-screen {
-  width: 256px;
-  height: 224px;
-}
-
-.n64-screen {
-  width: 320px;
-  height: 240px;
-}
-
-/* Group 3 & 4: DS / 3DS dual screens */
-.dual-screen {
+/* DS Screens */
+.ds-screen {
   display: flex;
   flex-direction: column;
-  align-items: center; /* center bottom screen horizontally */
-  gap: 5px;
+  align-items: center;
+  gap: 10px;
 }
 
-.ds-top,
-._3ds-top {
-  border: 2px solid #444;
-  border-radius: 6px;
-}
-
-.ds-bottom,
-._3ds-bottom {
-  border: 2px solid #444;
-  border-radius: 6px;
-  width: 80%;   /* 80% of top screen width */
-  height: 80%;  /* 80% of top screen height */
-}
-
-/* DS native resolutions */
-.ds-top {
-  width: 256px;
-  height: 192px;
+.ds-top, .ds-bottom {
+  width: 80%;
+  max-width: 640px;
+  aspect-ratio: 4 / 3;
+  background: #000;
 }
 
 .ds-bottom {
-  width: 204px;  /* 256 * 0.8 */
-  height: 154px; /* 192 * 0.8 */
+  transform: scale(0.8); /* 20% smaller */
 }
 
-/* 3DS native resolutions */
+/* 3DS Screens */
+._3ds-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  height: 100%;
+}
+
 ._3ds-top {
-  width: 400px;
-  height: 240px;
+  width: 100%;
+  max-width: 800px;
+  aspect-ratio: 400 / 240;
+  background: black;
 }
 
 ._3ds-bottom {
-  width: 320px; /* 400 * 0.8 */
-  height: 192px; /* 240 * 0.8 */
-}
-
-/* Group 5: PS1 */
-.ps1-screen {
-  width: 320px;
-  height: 240px;
-}
-
-/* --- Quick Menu Overlay Placeholder --- */
-.quick-menu {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  background-color: rgba(25, 25, 25, 0.95);
-  padding: 10px;
-  border-radius: 6px;
-  display: none; /* toggle via JS */
-  z-index: 100;
-}
-
-.quick-menu.active {
-  display: block;
+  width: 80%;
+  max-width: 640px;
+  aspect-ratio: 320 / 240;
+  background: black;
 }
 

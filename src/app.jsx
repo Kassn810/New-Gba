@@ -1,130 +1,87 @@
-// src/App.jsx
-import React, { useState, useRef, useEffect } from "react";
-import "./App.css";
-
-// Core loaders
+import React, { useState } from "react";
 import GBA from "./cores/gba";
 import GBC from "./cores/gbc";
 import GB from "./cores/gb";
+import DS from "./cores/ds";
+import _3DS from "./cores/_3ds";
 import NES from "./cores/nes";
 import SNES from "./cores/snes";
 import N64 from "./cores/n64";
-import DS from "./cores/ds";
-import _3DS from "./cores/_3ds";
 import PS1 from "./cores/ps1";
 
-// Utils
-import { readROM, validateROM } from "./utils/fileHelpers";
-import { saveState, loadState } from "./utils/saveState";
-
 export default function App() {
-  const [modules, setModules] = useState({});
-  const [activeCore, setActiveCore] = useState("gba");
+  const [page, setPage] = useState("menu");
+  const [selectedConsole, setSelectedConsole] = useState(null);
+  const [romFile, setRomFile] = useState(null);
 
-  // Canvas refs
-  const gbaRef = useRef(null);
-  const gbcRef = useRef(null);
-  const gbRef = useRef(null);
-  const nesRef = useRef(null);
-  const snesRef = useRef(null);
-  const n64Ref = useRef(null);
-  const dsTopRef = useRef(null);
-  const dsBottomRef = useRef(null);
-  const _3dsTopRef = useRef(null);
-  const _3dsBottomRef = useRef(null);
-  const ps1Ref = useRef(null);
-
-  // Initialize cores
-  useEffect(() => {
-    const initCore = async (coreName, loader, canvas, bottomCanvas) => {
-      const module = await loader.init({ canvas, bottomCanvas });
-      setModules((prev) => ({ ...prev, [coreName]: module }));
-    };
-
-    initCore("gba", GBA, gbaRef.current);
-    initCore("gbc", GBC, gbcRef.current);
-    initCore("gb", GB, gbRef.current);
-    initCore("nes", NES, nesRef.current);
-    initCore("snes", SNES, snesRef.current);
-    initCore("n64", N64, n64Ref.current);
-    initCore("ds", DS, dsTopRef.current, dsBottomRef.current);
-    initCore("_3ds", _3DS, _3dsTopRef.current, _3dsBottomRef.current);
-    initCore("ps1", PS1, ps1Ref.current);
-  }, []);
-
-  // Load ROM
-  const handleROMLoad = async (e) => {
+  const handleRomUpload = (e) => {
     const file = e.target.files[0];
-    if (!file) return;
-
-    if (!validateROM(file, activeCore)) {
-      alert(`Invalid ROM for ${activeCore}`);
-      return;
-    }
-
-    const data = await readROM(file);
-    const module = modules[activeCore];
-    if (!module?.loadROM || !module?.start) return;
-
-    module.loadROM(module, data);
-    module.start(module);
+    if (file) setRomFile(file);
   };
 
-  // Save/load state
-  const handleSaveState = () => saveState(activeCore, modules[activeCore]);
-  const handleLoadState = () => loadState(activeCore, modules[activeCore]);
+  const startEmulator = () => {
+    if (selectedConsole && romFile) setPage("emulator");
+  };
 
-  // Core selection
-  const handleCoreChange = (e) => setActiveCore(e.target.value);
+  const renderEmulator = () => {
+    switch (selectedConsole) {
+      case "gba": return <GBA rom={romFile} />;
+      case "gbc": return <GBC rom={romFile} />;
+      case "gb": return <GB rom={romFile} />;
+      case "ds": return <DS rom={romFile} />;
+      case "3ds": return <_3DS rom={romFile} />;
+      case "nes": return <NES rom={romFile} />;
+      case "snes": return <SNES rom={romFile} />;
+      case "n64": return <N64 rom={romFile} />;
+      case "ps1": return <PS1 rom={romFile} />;
+      default: return <p>No console selected</p>;
+    }
+  };
 
   return (
-    <div className="app-container">
-      <header>
-        <h1>Multi-Core Emulator</h1>
-        <div className="controls">
-          <select value={activeCore} onChange={handleCoreChange}>
-            <option value="gba">GBA</option>
-            <option value="gbc">GBC</option>
-            <option value="gb">GB</option>
-            <option value="nes">NES</option>
-            <option value="snes">SNES</option>
-            <option value="n64">N64</option>
-            <option value="ds">DS</option>
-            <option value="_3ds">3DS</option>
-            <option value="ps1">PS1</option>
-          </select>
-          <input type="file" onChange={handleROMLoad} />
-          <button onClick={handleSaveState}>Save State</button>
-          <button onClick={handleLoadState}>Load State</button>
+    <div className="app">
+      {page === "menu" && (
+        <div className="menu">
+          <h1 className="title">🎮 Retro Emulator Hub</h1>
+          <p className="subtitle">Choose your console and load a ROM</p>
+          <div className="console-grid">
+            {["gba", "gbc", "gb", "ds", "3ds", "nes", "snes", "n64", "ps1"].map((c) => (
+              <button
+                key={c}
+                className={`console-btn ${selectedConsole === c ? "active" : ""}`}
+                onClick={() => setSelectedConsole(c)}
+              >
+                {c.toUpperCase()}
+              </button>
+            ))}
+          </div>
+          <input
+            type="file"
+            accept=".gba,.gbc,.gb,.nds,.3ds,.nes,.sfc,.smc,.z64,.n64,.v64,.bin,.cue"
+            onChange={handleRomUpload}
+            className="file-input"
+          />
+          <button
+            onClick={startEmulator}
+            className="start-btn"
+            disabled={!selectedConsole || !romFile}
+          >
+            ▶ Start Emulator
+          </button>
         </div>
-      </header>
+      )}
 
-      <main className="screens-container">
-        {/* Group 1: GBA, GB, GBC */}
-        <canvas ref={gbaRef} className="screen gba-screen" />
-        <canvas ref={gbcRef} className="screen gbc-screen" />
-        <canvas ref={gbRef} className="screen gb-screen" />
-
-        {/* Group 2: NES, SNES, N64 */}
-        <canvas ref={nesRef} className="screen nes-screen" />
-        <canvas ref={snesRef} className="screen snes-screen" />
-        <canvas ref={n64Ref} className="screen n64-screen" />
-
-        {/* Group 3: DS dual screens */}
-        <div className="dual-screen ds">
-          <canvas ref={dsTopRef} className="screen ds-top" />
-          <canvas ref={dsBottomRef} className="screen ds-bottom" />
+      {page === "emulator" && (
+        <div className="emulator">
+          <div className="emulator-header">
+            <button onClick={() => setPage("menu")} className="back-btn">⬅ Menu</button>
+            <h2>{selectedConsole.toUpperCase()} Emulator</h2>
+          </div>
+          <div className="emulator-screen">
+            {renderEmulator()}
+          </div>
         </div>
-
-        {/* Group 4: 3DS dual screens */}
-        <div className="dual-screen _3ds">
-          <canvas ref={_3dsTopRef} className="screen _3ds-top" />
-          <canvas ref={_3dsBottomRef} className="screen _3ds-bottom" />
-        </div>
-
-        {/* Group 5: PS1 */}
-        <canvas ref={ps1Ref} className="screen ps1-screen" />
-      </main>
+      )}
     </div>
   );
 }
