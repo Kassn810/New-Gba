@@ -1,35 +1,42 @@
 // src/cores/gba.js
-export default async function initGBA(canvas, romBuffer) {
-  try {
-    const response = await fetch("/cores/gba.wasm");
-    const bytes = await response.arrayBuffer();
+export default class GBA {
+  constructor() {
+    this.instance = null;
+    this.memory = null;
+  }
 
-    const memory = new WebAssembly.Memory({ initial: 256 });
+  async init({ wasmPath, canvas }) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext("2d");
 
-    const { instance } = await WebAssembly.instantiate(bytes, {
-      env: { memory, abort: () => console.log("Abort called in GBA core") },
+    const wasmBuffer = await fetch(wasmPath).then(r => r.arrayBuffer());
+    const wasmModule = await WebAssembly.instantiate(wasmBuffer, {
+      env: {
+        memory: new WebAssembly.Memory({ initial: 256 }),
+        abort: () => console.error("WASM aborted"),
+      },
     });
 
-    if (instance.exports.init) instance.exports.init();
+    this.instance = wasmModule.instance;
+    this.memory = new Uint8Array(this.instance.exports.memory.buffer);
+  }
 
-    if (instance.exports.loadROM) {
-      const romPtr = instance.exports.loadROM(romBuffer.byteLength);
-      const heap = new Uint8Array(instance.exports.memory.buffer, romPtr, romBuffer.byteLength);
-      heap.set(new Uint8Array(romBuffer));
+  async loadROM(romBuffer) {
+    const romBytes = new Uint8Array(romBuffer);
+    this.romPtr = this.instance.exports._malloc(romBytes.length);
+    this.memory.set(romBytes, this.romPtr);
+  }
+
+  start() {
+    if (this.instance.exports._start) {
+      this.instance.exports._start(this.romPtr, 0); // adjust length if needed
     }
+    // You may need a render loop here if your core exposes a framebuffer
+  }
 
-    // Run at native GBA refresh rate
-    const frameInterval = 1000 / 59.727;
-    const loop = setInterval(() => {
-      if (instance.exports.frame) instance.exports.frame();
-    }, frameInterval);
-
-    // Return cleanup
-    return () => clearInterval(loop);
-
-  } catch (err) {
-    console.error("Failed to init GBA core:", err);
-    return () => {};
+  stop() {
+    if (this.romPtr) this.instance.exports._free(this.romPtr);
+    this.instance = null;
+    this.memory = null;
   }
 }
-
