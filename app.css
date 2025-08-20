@@ -1,0 +1,110 @@
+body {
+  margin: 0;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  background: #1b1b1b;
+  color: #f0f0f0;
+}
+
+.emulator-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2rem;
+}
+
+.emulator-title {
+  font-size: 2rem;
+  margin-bottom: 1rem;
+  text-shadow: 2px 2px 5px #000;
+}
+
+.canvas-wrapper {
+  background: #333;
+  padding: 0.5rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+  margin-bottom: 1rem;
+}
+
+.gba-canvas {
+  image-rendering: pixelated;
+  display: block;
+  border-radius: 6px;
+}
+
+.controls {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.control-btn {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 6px;
+  background: #555;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.control-btn:hover {
+  background: #777;
+  transform: scale(1.05);
+}
+
+.control-btn:disabled {
+  background: #333;
+  cursor: not-allowed;
+}
+
+.file-input {
+  padding: 0.3rem;
+  border-radius: 6px;
+  background: #444;
+  color: #fff;
+  cursor: pointer;
+}
+
+.quick-menu {
+  position: fixed;
+  top: 0;
+  right: -300px;
+  width: 280px;
+  height: 100%;
+  background: rgba(40, 40, 40, 0.95);
+  color: #fff;
+  padding: 1rem;
+  box-shadow: -4px 0 12px rgba(0, 0, 0, 0.7);
+  transition: right 0.3s ease-in-out;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  z-index: 1000;
+}
+
+.quick-menu.open {
+  right: 0;
+}
+
+.quick-menu h2 {
+  margin: 0;
+  text-align: center;
+  font-size: 1.5rem;
+  border-bottom: 1px solid #555;
+  padding-bottom: 0.5rem;
+}
+
+.menu-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.menu-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+}

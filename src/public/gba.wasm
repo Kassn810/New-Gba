@@ -1,0 +1,10 @@
+// Node.js script to create gba.wasm placeholder
+const fs = require("fs");
+
+const minimalWasm = new Uint8Array([
+  0x00,0x61,0x73,0x6d, // "\0asm" WASM header
+  0x01,0x00,0x00,0x00  // WASM version 1
+]);
+
+fs.writeFileSync("./public/gba.wasm", minimalWasm);
+console.log("Created placeholder gba.wasm");
