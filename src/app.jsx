@@ -1,165 +1,216 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import clsx from "clsx";
 
-// IndexedDB helpers (same as before)
-async function openDB() {
+// ------------------------------
+// IndexedDB helpers
+// ------------------------------
+const DB_NAME = "multi-emulator-fs";
+const STORE = "files";
+
+function openDB() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open("multi-emulator-fs", 1);
+    const req = indexedDB.open(DB_NAME, 1);
     req.onupgradeneeded = () => {
       const db = req.result;
-      if (!db.objectStoreNames.contains("files")) db.createObjectStore("files");
+      if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
 }
+
 async function idbPut(key, value) {
   const db = await openDB();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction("files", "readwrite");
-    tx.objectStore("files").put(value, key);
+    const tx = db.transaction(STORE, "readwrite");
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
+    tx.objectStore(STORE).put(value, key);
   });
 }
+
 async function idbGet(key) {
   const db = await openDB();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction("files", "readonly");
-    const req = tx.objectStore("files").get(key);
+    const tx = db.transaction(STORE, "readonly");
+    const req = tx.objectStore(STORE).get(key);
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
 }
+
 async function idbKeys() {
   const db = await openDB();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction("files", "readonly");
+    const tx = db.transaction(STORE, "readonly");
     const keys = [];
-    const req = tx.objectStore("files").openCursor();
+    const req = tx.objectStore(STORE).openCursor();
     req.onsuccess = (e) => {
       const cursor = e.target.result;
       if (cursor) {
         keys.push(cursor.key);
         cursor.continue();
-      } else {
-        resolve(keys);
-      }
+      } else resolve(keys);
     };
     req.onerror = () => reject(req.error);
   });
 }
 
-// Loader injection for WASM cores
-function injectLoader(src) {
-  return new Promise((resolve, reject) => {
-    const existing = document.getElementById("emulator-loader");
-    if (existing) existing.remove();
-    const script = document.createElement("script");
-    script.id = "emulator-loader";
-    script.src = src;
-    script.async = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error("Failed to load emulator loader"));
-    document.body.appendChild(script);
-  });
-}
-
-// Map extensions to system
-const SYSTEMS = {
-  gba: ["gba"],
-  gb: ["gb"],
-  gbc: ["gbc"],
-  nes: ["nes"],
-  snes: ["smc", "sfc"],
-  n64: ["n64", "z64", "v64"],
-  nds: ["nds"],
-  ps1: ["iso", "bin", "cue"],
-  "3ds": ["3ds"],
-};
+// ------------------------------
+// System colors & helpers
+// ------------------------------
 const SYSTEM_COLORS = {
   gba: "bg-emerald-500",
   gb: "bg-green-700",
   gbc: "bg-green-600",
-  nes: "bg-red-500",
   snes: "bg-pink-500",
+  nes: "bg-red-500",
   n64: "bg-blue-500",
   nds: "bg-orange-500",
   ps1: "bg-purple-500",
   "3ds": "bg-cyan-500",
 };
-function getSystem(filename) {
-  const ext = filename.split(".").pop()?.toLowerCase();
-  return Object.entries(SYSTEMS).find(([k, arr]) => arr.includes(ext))?.[0] || null;
+
+const getSystem = (filename) => {
+  const lower = filename.toLowerCase();
+  if (lower.endsWith(".gba")) return "gba";
+  if (lower.endsWith(".gb")) return "gb";
+  if (lower.endsWith(".gbc")) return "gbc";
+  if (lower.endsWith(".smc") || lower.endsWith(".sfc")) return "snes";
+  if (lower.endsWith(".nes")) return "nes";
+  if (lower.endsWith(".n64") || lower.endsWith(".z64") || lower.endsWith(".v64")) return "n64";
+  if (lower.endsWith(".nds")) return "nds";
+  if (lower.endsWith(".iso") || lower.endsWith(".bin") || lower.endsWith(".cue")) return "ps1";
+  if (lower.endsWith(".3ds") || lower.endsWith(".cia") || lower.endsWith(".zip")) return "3ds";
+  return null;
+};
+
+// ------------------------------
+// WASM Emulator Loaders (stubs for now)
+// ------------------------------
+async function loadGBA(container, rom, bios) {
+  console.log("GBA loader called", rom, bios);
+  // TODO: Add actual WASM core initialization here
 }
 
+async function load3DS(container, rom) {
+  console.log("3DS loader called", rom);
+  // TODO: Add Citra WASM loader here
+}
+
+async function loadPS1(container, rom) {
+  console.log("PS1 loader called", rom);
+  // TODO: Add PS1 WASM loader here
+}
+
+// Add more loaders for NDS, N64, NES, SNES if needed
+async function loadNDS(container, rom) { console.log("NDS loader", rom); }
+async function loadN64(container, rom) { console.log("N64 loader", rom); }
+async function loadNES(container, rom) { console.log("NES loader", rom); }
+async function loadSNES(container, rom) { console.log("SNES loader", rom); }
+
+// ------------------------------
+// Main App
+// ------------------------------
 export default function App() {
-  const [roms, setRoms] = useState([]);
-  const [selected, setSelected] = useState(null);
-  const [biosName, setBiosName] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
   const containerRef = useRef(null);
   const fileInputRef = useRef(null);
-  const biosInputRef = useRef(null);
+
+  const [roms, setRoms] = useState([]);
+  const [selected, setSelected] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
 
   useEffect(() => {
     (async () => {
       const keys = await idbKeys();
-      setRoms(keys.filter(k => !k.toLowerCase().includes("bios")));
-      const bios = keys.find(k => k.toLowerCase().includes("bios"));
-      if (bios) setBiosName(bios);
+      setRoms(keys.filter((k) => !k.toLowerCase().includes("bios")));
     })();
   }, []);
 
-  const setStatus = (msg) => { setMessage(msg); setTimeout(() => setMessage(""), 3000); };
+  const setStatus = (msg) => {
+    setMessage(msg);
+    setTimeout(() => setMessage(""), 3000);
+  };
 
   const onAddRom = async (files) => {
     if (!files) return;
-    const added = [];
     for (const f of Array.from(files)) {
       await idbPut(f.name, f);
-      added.push(f.name);
     }
-    if (added.length) {
-      const keys = await idbKeys();
-      setRoms(keys.filter(k => !k.toLowerCase().includes("bios")));
-      setStatus(`Added ${added.length} ROM${added.length>1?"s":""}`);
-    }
+    const keys = await idbKeys();
+    setRoms(keys.filter((k) => !k.toLowerCase().includes("bios")));
+    setStatus("ROMs added!");
   };
 
-  const onAddBios = async (files) => {
-    if (!files || files.length === 0) return;
-    const f = files[0];
-    await idbPut("bios.bin", f);
-    setBiosName("bios.bin");
-    setStatus("BIOS stored");
-  };
-
-  const startEmulator = async (romName) => {
+  const startEmulator = async (name) => {
     try {
       setLoading(true);
-      setStatus(`Starting ${romName}...`);
+      setStatus(`Starting ${name}...`);
+      const romBlob = await idbGet(name);
+      if (!romBlob) throw new Error("ROM not found in storage");
+      const system = getSystem(name);
+      const container = containerRef.current;
+      if (!container) return;
 
-      const romBlob = await idbGet(romName);
-      if (!romBlob) throw new Error("ROM not found");
+      // Clear previous
+      container.innerHTML = "";
 
-      const system = getSystem(romName);
-      const romURL = URL.createObjectURL(romBlob);
-
-      // Set container empty
-      if (containerRef.current) containerRef.current.innerHTML = "";
-
-      // Assign system-specific globals
-      window.EJS_player = "#emu-container";
-      window.EJS_core = system;
-      window.EJS_gameUrl = romURL;
-      if (biosName) {
-        const biosBlob = await idbGet(biosName);
-        if (biosBlob) window.EJS_biosUrl = URL.createObjectURL(biosBlob);
+      switch (system) {
+        case "gba":
+          const bios = await idbGet("gba_bios.bin");
+          await loadGBA(container, romBlob, bios);
+          break;
+        case "3ds":
+          await load3DS(container, romBlob);
+          break;
+        case "ps1":
+          await loadPS1(container, romBlob);
+          break;
+        case "nds": await loadNDS(container, romBlob); break;
+        case "n64": await loadN64(container, romBlob); break;
+        case "nes": await loadNES(container, romBlob); break;
+        case "snes": await loadSNES(container, romBlob); break;
+        default:
+          setStatus("No emulator core available for this file type");
       }
-      window.EJS_startOnLoaded = true;
 
-      // Load loader dynamically
-      await injectLoader(`https://cdn.emulatorjs.org/stable/loader.js?v=${Date.now()}`);
+      setSelected(name);
+    } catch (e) {
+      console.error(e);
+      setStatus(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      set
+  return (
+    <div className="min-h-screen bg-neutral-900 text-neutral-100 p-6 font-sans">
+      <h1 className="text-3xl font-bold mb-4">🎮 Multi-System Emulator</h1>
+
+      <div className="flex gap-2 mb-4">
+        <button onClick={() => fileInputRef.current && fileInputRef.current.click()} className="px-4 py-2 bg-green-600 rounded-lg">Add ROMs</button>
+        <input ref={fileInputRef} type="file" accept=".gba,.gb,.gbc,.smc,.sfc,.nes,.n64,.z64,.v64,.nds,.iso,.bin,.cue,.3ds,.cia,.zip" multiple className="hidden" onChange={e => onAddRom(e.target.files)} />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
+        {roms.map(name => {
+          const system = getSystem(name);
+          return (
+            <div key={name} className="bg-neutral-800 p-3 rounded-lg flex justify-between items-center">
+              <span>{name}</span>
+              {system && <span className={clsx("px-2 py-0.5 rounded-full text-black text-xs font-bold", SYSTEM_COLORS[system])}>{system.toUpperCase()}</span>}
+              <button onClick={() => startEmulator(name)} className="ml-2 px-2 py-1 bg-blue-600 rounded-lg">Play</button>
+            </div>
+          );
+        })}
+      </div>
+
+      <div ref={containerRef} className="w-full aspect-[4/3] bg-neutral-950 rounded-lg border border-neutral-700 flex items-center justify-center text-neutral-500">
+        {selected ? `Playing: ${selected}` : "Select a ROM to start"}
+      </div>
+
+      {message && <div className="fixed bottom-4 right-4 bg-neutral-800 p-2 rounded-lg shadow">{message}</div>}
+    </div>
+  );
+}
